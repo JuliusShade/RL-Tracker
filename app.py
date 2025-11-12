@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QFont
 from rank_map import rank_icon_path
+from activity_map import parse_activity_data, build_heatmap_widget
 
 
 class RLStatsApp(QMainWindow):
@@ -23,7 +24,13 @@ class RLStatsApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config = self._load_config()
-        self.cache_path = Path(self.config['cache']['path']).expanduser()
+        # Use project root for cache path
+        cache_path_str = self.config['cache']['path']
+        if cache_path_str.startswith('~'):
+            self.cache_path = Path(cache_path_str).expanduser()
+        else:
+            # Relative to project root (same directory as app.py)
+            self.cache_path = Path(__file__).parent / cache_path_str
 
         self.init_ui()
         self.load_stats()
@@ -41,12 +48,16 @@ class RLStatsApp(QMainWindow):
 
     def init_ui(self):
         """Initialize the user interface"""
-        self.setWindowTitle("Rocket League Stats Tracker")
+        self.setWindowTitle("RL Stats")
 
-        # Set window size from config
+        # Set window size from config - optimize for Pi 7" display
         width = self.config['display']['window_width']
         height = self.config['display']['window_height']
         self.setGeometry(100, 100, width, height)
+
+        # For Pi display, use fixed size to prevent resizing
+        if width == 800 and height == 480:
+            self.setFixedSize(width, height)
 
         # Apply theme
         self.apply_theme()
@@ -56,43 +67,46 @@ class RLStatsApp(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(8)  # Reduced spacing for compact layout
+        main_layout.setContentsMargins(10, 8, 10, 8)  # Reduced margins
 
-        # Header
-        header = QLabel("Rocket League Stats Dashboard")
-        header.setFont(QFont("Arial", 24, QFont.Bold))
+        # Header - compact
+        header = QLabel("RL Stats Dashboard")
+        header.setFont(QFont("Arial", 16, QFont.Bold))  # Smaller font
         header.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(header)
 
-        # Player info
+        # Player info and update time in one row
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(10)
+
         self.player_label = QLabel()
-        self.player_label.setFont(QFont("Arial", 14))
-        self.player_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(self.player_label)
+        self.player_label.setFont(QFont("Arial", 10))
+        info_layout.addWidget(self.player_label)
 
-        # Last updated label
+        info_layout.addStretch()
+
         self.updated_label = QLabel("Last updated: Never")
-        self.updated_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(self.updated_label)
+        self.updated_label.setFont(QFont("Arial", 9))
+        self.updated_label.setStyleSheet("color: #999999;")
+        info_layout.addWidget(self.updated_label)
 
-        # Scroll area for stats
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main_layout.addLayout(info_layout)
 
-        scroll_content = QWidget()
-        self.stats_layout = QVBoxLayout(scroll_content)
-        self.stats_layout.setSpacing(15)
+        # Stats container - NO SCROLL AREA for Pi display
+        stats_widget = QWidget()
+        self.stats_layout = QVBoxLayout(stats_widget)
+        self.stats_layout.setSpacing(8)
+        self.stats_layout.setContentsMargins(0, 0, 0, 0)
 
-        scroll.setWidget(scroll_content)
-        main_layout.addWidget(scroll)
+        main_layout.addWidget(stats_widget)
 
-        # Refresh button
-        refresh_btn = QPushButton("Refresh Stats")
+        # Refresh button - compact
+        refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.load_stats)
-        refresh_btn.setMaximumWidth(200)
-        refresh_btn.setMinimumHeight(40)
+        refresh_btn.setMaximumWidth(120)
+        refresh_btn.setMinimumHeight(30)
+        refresh_btn.setFont(QFont("Arial", 10))
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -210,157 +224,155 @@ class RLStatsApp(QMainWindow):
         # Update player info
         platform = self.config['profile']['platform']
         username = self.config['profile']['username']
-        self.player_label.setText(f"Player: {username} ({platform.upper()})")
+        self.player_label.setText(f"{username} ({platform.upper()})")
 
         # Update timestamp
         timestamp = data.get('timestamp', '')
         if timestamp:
             try:
                 dt = datetime.fromisoformat(timestamp)
-                formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-                self.updated_label.setText(f"Last updated: {formatted_time}")
+                formatted_time = dt.strftime("%m/%d %H:%M")
+                self.updated_label.setText(f"Updated: {formatted_time}")
             except:
-                self.updated_label.setText(f"Last updated: {timestamp}")
+                self.updated_label.setText(f"Updated: {timestamp}")
+
+        # Create horizontal layout for ranks and activity
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
 
         # Display rank information
         overview = data.get('overview', {})
         if overview:
             ranks_frame = self.create_ranks_section(overview)
-            self.stats_layout.addWidget(ranks_frame)
+            top_row.addWidget(ranks_frame, stretch=3)
 
-        # Display recent matches
+        # Display activity heatmap
         matches = data.get('recent_matches', [])
+        if matches:
+            activity_data = parse_activity_data(matches)
+            heatmap_widget = build_heatmap_widget(activity_data, days=30)
+            top_row.addWidget(heatmap_widget, stretch=2)
+
+        self.stats_layout.addLayout(top_row)
+
+        # Display recent matches (compact)
         if matches:
             matches_frame = self.create_matches_section(matches)
             self.stats_layout.addWidget(matches_frame)
 
-        # Display performance stats
+        # Display performance stats (compact)
         performance = data.get('performance', {})
         if performance:
             perf_frame = self.create_performance_section(performance)
             self.stats_layout.addWidget(perf_frame)
 
-        # Add stretch at the end
-        self.stats_layout.addStretch()
+        # No stretch at the end for compact layout
 
     def create_ranks_section(self, overview):
-        """Create the ranks display section"""
+        """Create the ranks display section - compact for Pi"""
         frame = QFrame()
         layout = QVBoxLayout(frame)
+        layout.setSpacing(5)
+        layout.setContentsMargins(8, 6, 8, 6)
 
-        # Section title
-        title = QLabel("Current Ranks")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        # Section title - compact
+        title = QLabel("Ranks")
+        title.setFont(QFont("Arial", 12, QFont.Bold))
         layout.addWidget(title)
 
-        # Grid for playlists
-        grid = QGridLayout()
-        grid.setSpacing(15)
-
-        row = 0
-        col = 0
-        max_cols = 2
-
+        # Vertical list for playlists (more compact than grid)
         for playlist_name, stats in overview.items():
             # Create playlist widget
             playlist_widget = QWidget()
             playlist_layout = QHBoxLayout(playlist_widget)
-            playlist_layout.setSpacing(10)
+            playlist_layout.setSpacing(8)
+            playlist_layout.setContentsMargins(0, 2, 0, 2)
 
-            # Rank icon
+            # Rank icon - smaller
             rank_text = stats.get('rank', 'Unranked')
             icon_file = rank_icon_path(rank_text)
 
             rank_icon = QLabel()
             if icon_file.exists():
                 pixmap = QPixmap(str(icon_file))
-                # Scale to reasonable size
-                scaled_pixmap = pixmap.scaledToHeight(48, Qt.SmoothTransformation)
+                # Scale to smaller size for compact layout
+                scaled_pixmap = pixmap.scaledToHeight(32, Qt.SmoothTransformation)
                 rank_icon.setPixmap(scaled_pixmap)
-                rank_icon.setFixedSize(48, 48)
+                rank_icon.setFixedSize(32, 32)
             else:
                 # Placeholder if icon doesn't exist
                 rank_icon.setText("🏆")
-                rank_icon.setFont(QFont("Arial", 24))
+                rank_icon.setFont(QFont("Arial", 16))
                 rank_icon.setAlignment(Qt.AlignCenter)
-                rank_icon.setFixedSize(48, 48)
+                rank_icon.setFixedSize(32, 32)
 
             playlist_layout.addWidget(rank_icon)
 
-            # Text info (vertical layout)
-            text_widget = QWidget()
-            text_layout = QVBoxLayout(text_widget)
-            text_layout.setSpacing(2)
-            text_layout.setContentsMargins(0, 0, 0, 0)
-
+            # Text info - horizontal for space efficiency
             # Playlist name
-            name_label = QLabel(playlist_name)
-            name_label.setFont(QFont("Arial", 11, QFont.Bold))
-            text_layout.addWidget(name_label)
+            name_label = QLabel(playlist_name[:12])  # Truncate if too long
+            name_label.setFont(QFont("Arial", 9, QFont.Bold))
+            name_label.setFixedWidth(80)
+            playlist_layout.addWidget(name_label)
 
             # Rank
             rank_label = QLabel(rank_text)
-            rank_label.setFont(QFont("Arial", 12))
+            rank_label.setFont(QFont("Arial", 9))
             rank_label.setStyleSheet("color: #4ecdc4;")
-            text_layout.addWidget(rank_label)
+            rank_label.setFixedWidth(100)
+            playlist_layout.addWidget(rank_label)
 
             # MMR
             mmr = stats.get('mmr', 0)
-            mmr_label = QLabel(f"MMR: {mmr}")
-            mmr_label.setFont(QFont("Arial", 10))
-            text_layout.addWidget(mmr_label)
+            mmr_label = QLabel(f"{int(mmr)} MMR")
+            mmr_label.setFont(QFont("Arial", 9))
+            mmr_label.setAlignment(Qt.AlignRight)
+            playlist_layout.addWidget(mmr_label)
 
-            playlist_layout.addWidget(text_widget)
             playlist_layout.addStretch()
+            layout.addWidget(playlist_widget)
 
-            grid.addWidget(playlist_widget, row, col)
-
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
-
-        layout.addLayout(grid)
         return frame
 
     def create_matches_section(self, matches):
-        """Create the recent matches section"""
+        """Create the recent matches section - compact"""
         frame = QFrame()
         layout = QVBoxLayout(frame)
+        layout.setSpacing(3)
+        layout.setContentsMargins(8, 6, 8, 6)
 
         # Section title
         title = QLabel("Recent Matches")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setFont(QFont("Arial", 11, QFont.Bold))
         layout.addWidget(title)
 
-        # Match list
-        for i, match in enumerate(matches[:5], 1):  # Show top 5
+        # Match list - show only top 3 for compact layout
+        for i, match in enumerate(matches[:3], 1):
             match_widget = QWidget()
             match_layout = QHBoxLayout(match_widget)
-            match_layout.setContentsMargins(10, 5, 10, 5)
+            match_layout.setContentsMargins(0, 1, 0, 1)
+            match_layout.setSpacing(6)
 
-            # Match number
-            num_label = QLabel(f"#{i}")
-            num_label.setFixedWidth(30)
-            match_layout.addWidget(num_label)
-
-            # Result
+            # Result indicator (W/L)
             result = match.get('result', 'Unknown')
-            result_label = QLabel(result)
-            result_label.setFont(QFont("Arial", 12, QFont.Bold))
-            result_label.setFixedWidth(80)
+            result_short = "W" if 'Win' in result or 'Victory' in result else "L" if 'Loss' in result or 'Defeat' in result else "?"
+            result_label = QLabel(result_short)
+            result_label.setFont(QFont("Arial", 10, QFont.Bold))
+            result_label.setFixedWidth(15)
 
-            if 'Win' in result or 'Victory' in result:
+            if result_short == "W":
                 result_label.setStyleSheet("color: #51cf66;")
-            elif 'Loss' in result or 'Defeat' in result:
+            elif result_short == "L":
                 result_label.setStyleSheet("color: #ff6b6b;")
 
             match_layout.addWidget(result_label)
 
-            # Playlist
+            # Playlist - shortened
             playlist = match.get('playlist', 'Unknown')
-            playlist_label = QLabel(playlist)
-            playlist_label.setFont(QFont("Arial", 11))
+            playlist_short = playlist.replace('Ranked Doubles', '2v2').replace('Ranked Duel', '1v1').replace('Ranked Standard', '3v3')
+            playlist_label = QLabel(playlist_short[:10])
+            playlist_label.setFont(QFont("Arial", 9))
+            playlist_label.setFixedWidth(60)
             match_layout.addWidget(playlist_label)
 
             match_layout.addStretch()
@@ -368,8 +380,8 @@ class RLStatsApp(QMainWindow):
             # MMR change
             mmr_change = match.get('mmr_change', '0')
             mmr_label = QLabel(mmr_change)
-            mmr_label.setFont(QFont("Arial", 11, QFont.Bold))
-            if '+' in mmr_change or (mmr_change.replace('.', '').isdigit() and float(mmr_change) > 0):
+            mmr_label.setFont(QFont("Arial", 9, QFont.Bold))
+            if '+' in mmr_change or (mmr_change.replace('.', '').replace('-', '').isdigit() and mmr_change.startswith('+')):
                 mmr_label.setStyleSheet("color: #51cf66;")
             elif '-' in mmr_change:
                 mmr_label.setStyleSheet("color: #ff6b6b;")
@@ -381,47 +393,51 @@ class RLStatsApp(QMainWindow):
         return frame
 
     def create_performance_section(self, performance):
-        """Create the performance metrics section"""
+        """Create the performance metrics section - compact"""
         frame = QFrame()
         layout = QVBoxLayout(frame)
+        layout.setSpacing(3)
+        layout.setContentsMargins(8, 6, 8, 6)
 
         # Section title
-        title = QLabel("Performance Metrics")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title = QLabel("Performance")
+        title.setFont(QFont("Arial", 11, QFont.Bold))
         layout.addWidget(title)
 
-        # Grid for stats
-        grid = QGridLayout()
-        grid.setSpacing(10)
+        # Horizontal layout for stats (more compact)
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(15)
 
-        row = 0
-        col = 0
-        max_cols = 3
-
+        # Limit to top 4 most important stats
+        count = 0
+        max_stats = 4
         for label, value in performance.items():
+            if count >= max_stats:
+                break
+
             stat_widget = QWidget()
-            stat_layout = QVBoxLayout(stat_widget)
-            stat_layout.setSpacing(2)
+            stat_vlayout = QVBoxLayout(stat_widget)
+            stat_vlayout.setSpacing(1)
+            stat_vlayout.setContentsMargins(0, 0, 0, 0)
 
             # Stat label
-            label_widget = QLabel(label)
-            label_widget.setFont(QFont("Arial", 10))
+            label_widget = QLabel(label[:12])  # Truncate long labels
+            label_widget.setFont(QFont("Arial", 8))
             label_widget.setStyleSheet("color: #999999;")
-            stat_layout.addWidget(label_widget)
+            label_widget.setAlignment(Qt.AlignCenter)
+            stat_vlayout.addWidget(label_widget)
 
             # Stat value
             value_widget = QLabel(str(value))
-            value_widget.setFont(QFont("Arial", 14, QFont.Bold))
-            stat_layout.addWidget(value_widget)
+            value_widget.setFont(QFont("Arial", 11, QFont.Bold))
+            value_widget.setAlignment(Qt.AlignCenter)
+            stat_vlayout.addWidget(value_widget)
 
-            grid.addWidget(stat_widget, row, col)
+            stats_layout.addWidget(stat_widget)
+            count += 1
 
-            col += 1
-            if col >= max_cols:
-                col = 0
-                row += 1
-
-        layout.addLayout(grid)
+        stats_layout.addStretch()
+        layout.addLayout(stats_layout)
         return frame
 
 

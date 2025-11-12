@@ -17,7 +17,13 @@ class RLTrackerScraper:
     def __init__(self, config_path="config.yaml"):
         """Initialize scraper with configuration"""
         self.config = self._load_config(config_path)
-        self.cache_path = Path(self.config['cache']['path']).expanduser()
+        # Use project root for cache path
+        cache_path_str = self.config['cache']['path']
+        if cache_path_str.startswith('~'):
+            self.cache_path = Path(cache_path_str).expanduser()
+        else:
+            # Relative to project root (same directory as scraper.py)
+            self.cache_path = Path(__file__).parent / cache_path_str
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _load_config(self, config_path):
@@ -130,17 +136,20 @@ class RLTrackerScraper:
         """Scrape recent match history"""
         try:
             page.goto(self.config['urls']['matches'], timeout=60000)
-            page.wait_for_selector('h1, [class*="profile"]', timeout=15000)
-            page.wait_for_timeout(3000)
+            page.wait_for_selector('h1, [class*="profile"]', timeout=20000)
+            page.wait_for_timeout(5000)  # Extended wait for client-side rendering
 
             matches = []
 
-            # Look for match/game history containers
+            # Look for match/game history containers with improved selectors
             match_selectors = [
+                '[class*="match-row"]',
                 '[class*="match"]',
+                '[class*="game-row"]',
                 '[class*="game"]',
                 '[class*="session"]',
-                'tr[class*="row"]'
+                'tr[class*="row"]',
+                'div[class*="table"] > div',  # Common for modern designs
             ]
 
             match_elements = []
@@ -148,7 +157,7 @@ class RLTrackerScraper:
                 try:
                     elements = page.query_selector_all(selector)
                     if elements and len(elements) >= 3:  # At least a few matches
-                        match_elements = elements[:10]  # Limit to 10
+                        match_elements = elements[:20]  # Increased to 20 for better activity data
                         print(f"Found {len(elements)} match elements with selector: {selector}")
                         break
                 except:
@@ -156,6 +165,9 @@ class RLTrackerScraper:
 
             if not match_elements:
                 print("No match elements found")
+                # Debug: print page structure
+                all_text = page.inner_text('body')
+                print(f"Page text sample: {all_text[:300]}")
                 return matches
 
             for i, match in enumerate(match_elements):
@@ -171,22 +183,37 @@ class RLTrackerScraper:
                     result = "Unknown"
                     playlist = "Unknown"
                     mmr_change = "0"
+                    date_str = None
 
                     for line in lines:
+                        # Check for result
                         if any(w in line.lower() for w in ['win', 'victory', 'defeat', 'loss']):
                             result = line
-                        elif any(w in line.lower() for w in ['doubles', 'duel', 'standard', 'ranked']):
+                        # Check for playlist
+                        elif any(w in line.lower() for w in ['doubles', 'duel', 'standard', 'ranked', '1v1', '2v2', '3v3']):
                             playlist = line
-                        elif '+' in line or '-' in line:
-                            if any(c.isdigit() for c in line):
+                        # Check for MMR change
+                        elif ('+' in line or '-' in line) and any(c.isdigit() for c in line):
+                            # Make sure it's not a date
+                            if '/' not in line and not any(month in line.lower() for month in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']):
                                 mmr_change = line
+                        # Check for date (various formats)
+                        elif any(c.isdigit() for c in line):
+                            # Look for date patterns
+                            if '/' in line or '-' in line or any(month in line.lower() for month in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']):
+                                date_str = self._parse_date(line)
+                            elif 'ago' in line.lower() or 'day' in line.lower() or 'hour' in line.lower():
+                                date_str = self._parse_relative_date(line)
 
                     if result != "Unknown" or playlist != "Unknown":
-                        matches.append({
+                        match_data = {
                             'result': result,
                             'playlist': playlist,
                             'mmr_change': mmr_change
-                        })
+                        }
+                        if date_str:
+                            match_data['date'] = date_str
+                        matches.append(match_data)
 
                 except Exception as e:
                     print(f"Error parsing match {i}: {e}")
@@ -200,20 +227,86 @@ class RLTrackerScraper:
             traceback.print_exc()
             return []
 
+    def _parse_date(self, date_text):
+        """Parse date from text into YYYY-MM-DD format"""
+        try:
+            # Try various date formats
+            from datetime import datetime
+
+            # Remove extra whitespace
+            date_text = date_text.strip()
+
+            # Common formats
+            formats = [
+                '%m/%d/%Y',
+                '%Y-%m-%d',
+                '%d/%m/%Y',
+                '%b %d, %Y',
+                '%B %d, %Y',
+                '%m-%d-%Y',
+            ]
+
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(date_text, fmt)
+                    return dt.strftime('%Y-%m-%d')
+                except:
+                    continue
+
+            return None
+        except:
+            return None
+
+    def _parse_relative_date(self, relative_text):
+        """Parse relative date like '2 days ago' into YYYY-MM-DD format"""
+        try:
+            from datetime import datetime, timedelta
+
+            text = relative_text.lower()
+            today = datetime.now()
+
+            # Extract number
+            import re
+            match = re.search(r'(\d+)', text)
+            if not match:
+                return today.strftime('%Y-%m-%d')
+
+            num = int(match.group(1))
+
+            if 'hour' in text or 'hr' in text:
+                # Same day
+                return today.strftime('%Y-%m-%d')
+            elif 'day' in text:
+                dt = today - timedelta(days=num)
+                return dt.strftime('%Y-%m-%d')
+            elif 'week' in text:
+                dt = today - timedelta(weeks=num)
+                return dt.strftime('%Y-%m-%d')
+            elif 'month' in text:
+                dt = today - timedelta(days=num*30)
+                return dt.strftime('%Y-%m-%d')
+
+            return today.strftime('%Y-%m-%d')
+        except:
+            return None
+
     def scrape_performance(self, page):
         """Scrape performance metrics"""
         try:
             page.goto(self.config['urls']['performance'], timeout=60000)
-            page.wait_for_selector('h1, [class*="profile"]', timeout=15000)
-            page.wait_for_timeout(3000)
+            page.wait_for_selector('h1, [class*="profile"]', timeout=20000)
+            page.wait_for_timeout(5000)  # Extended wait
 
             performance = {}
 
-            # Look for stat containers
+            # Look for stat containers with improved selectors
             stat_selectors = [
+                '[class*="stat-card"]',
                 '[class*="stat"]',
                 '[class*="metric"]',
-                'div[class*="giant"]'
+                'div[class*="giant"]',
+                '[class*="performance"]',
+                'div[class*="value"]',
             ]
 
             stat_elements = []
@@ -229,6 +322,9 @@ class RLTrackerScraper:
 
             if not stat_elements:
                 print("No performance stat elements found")
+                # Debug output
+                all_text = page.inner_text('body')
+                print(f"Page text sample: {all_text[:300]}")
                 return performance
 
             for i, stat in enumerate(stat_elements):
@@ -237,7 +333,7 @@ class RLTrackerScraper:
                     lines = [line.strip() for line in text.split('\n') if line.strip()]
 
                     # Skip if too short
-                    if len(lines) < 2:
+                    if len(lines) < 1:
                         continue
 
                     # Try to pair label with value
@@ -246,12 +342,17 @@ class RLTrackerScraper:
                         value = lines[j + 1]
 
                         # Skip navigation items
-                        if any(skip in label.lower() for skip in ['login', 'sign', 'menu', 'nav']):
+                        if any(skip in label.lower() for skip in ['login', 'sign', 'menu', 'nav', 'overview', 'matches', 'performance']):
                             continue
 
                         # If we have a label and numeric-ish value, store it
-                        if len(label) > 1 and (value.replace(',', '').replace('.', '').replace('%', '').isdigit() or any(c.isdigit() for c in value)):
-                            performance[label] = value
+                        if len(label) > 1 and len(label) < 50:  # Reasonable label length
+                            # Check if value looks like a stat
+                            value_clean = value.replace(',', '').replace('.', '').replace('%', '').replace(':', '')
+                            if value_clean.replace('-', '').isdigit() or any(c.isdigit() for c in value):
+                                # Avoid duplicates
+                                if label not in performance:
+                                    performance[label] = value
 
                 except Exception as e:
                     print(f"Error parsing stat {i}: {e}")

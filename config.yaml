@@ -18,10 +18,10 @@ refresh:
 
 # Cache settings
 cache:
-  path: "~/.cache/rl_stats.json"  # Where to store cached stats
+  path: "rl_stats.json"  # Where to store cached stats (in project root)
 
 # Display settings
 display:
   window_width: 800
-  window_height: 600
+  window_height: 480  # Optimized for 7" Raspberry Pi touchscreen
   theme: "dark"  # Options: dark, light

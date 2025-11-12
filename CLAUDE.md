@@ -20,12 +20,12 @@
     [Playwright Scraper]
            │
            ▼
-    ~/.cache/rl_stats.json
+    rl_stats.json (project root)
            │
     [PySide6 GUI App]
            │
            ▼
-    Desktop Dashboard
+    Desktop Dashboard (800x480 Pi-optimized)
 ```
 
 ### Tech Stack
@@ -41,7 +41,10 @@
 rl-tracker/
 ├── scraper.py           # Web scraper using Playwright
 ├── app.py               # PySide6 GUI application
+├── activity_map.py      # Play activity heatmap widget
+├── rank_map.py          # Rank icon mapping utilities
 ├── config.yaml          # User configuration (username, platform, settings)
+├── rl_stats.json        # Cached stats (auto-generated)
 ├── requirements.txt     # Python dependencies
 ├── .gitignore          # Git ignore patterns
 ├── README.md           # User-facing documentation
@@ -55,19 +58,37 @@ rl-tracker/
 
 ### scraper.py
 - Uses Playwright to scrape RL Tracker pages (overview, matches, performance)
-- Parses HTML to extract ranks, MMR, match history, performance stats
-- Saves data to `~/.cache/rl_stats.json`
+- Parses HTML to extract ranks, MMR, match history with dates, performance stats
+- Includes anti-Cloudflare detection measures
+- Extended timeouts (60s page load, 20s selectors, 5s render delay)
+- Date parsing for relative dates ("2 days ago") and absolute dates
+- Saves data to `rl_stats.json` in project root
 - Can be run standalone: `python scraper.py`
 
 ### app.py
 - PySide6 GUI that reads from the cache file
-- Displays stats in a dark-themed dashboard
+- Displays stats in a dark-themed dashboard optimized for 7" Pi display (800x480)
+- Compact layout with NO scrollbars - all content fits on one screen
 - Auto-refreshes every N minutes (configurable)
 - Features:
-  - Current ranks for all playlists (1v1, 2v2, 3v3, etc.)
-  - Recent match history with W/L and MMR changes
-  - Performance metrics (goals, assists, saves, etc.)
+  - Current ranks for all playlists with rank icons (or emoji fallback)
+  - Play activity heatmap (GitHub-style, last 30 days)
+  - Recent match history (last 3 matches) with W/L and MMR changes
+  - Performance metrics (top 4 stats)
   - Manual refresh button
+
+### activity_map.py
+- Creates GitHub-style activity heatmap widget
+- Visualizes match frequency over last 30 days
+- Color-coded squares (dark gray = no activity, bright orange = high activity)
+- Tooltips showing date and match count
+- Parses match dates from scraper data
+
+### rank_map.py
+- Maps rank text to icon file paths
+- Normalizes rank names (e.g., "Champion III Division II" → "champion_iii")
+- Handles multiple rank formats and divisions
+- Falls back to unranked.png or base rank if specific division not found
 
 ### config.yaml
 - User profile settings (platform: epic/steam/psn/xbl, username)
@@ -99,22 +120,42 @@ rl-tracker/
 - [x] Added emoji fallback (🏆) when rank icons not found
 - [x] Improved error handling and debugging (screenshots, traceback)
 
+### ✅ Completed (Issue #3 - Fix Cache Path, Integrate Rank Images, Add Activity Heatmap)
+- [x] Changed cache path from `~/.cache/rl_stats.json` to project root `rl_stats.json`
+- [x] Updated both scraper.py and app.py to use project-relative cache path
+- [x] Improved scraper selectors for better match/performance parsing
+- [x] Added date parsing (absolute and relative) to match data
+- [x] Increased match limit to 20 for better activity tracking
+- [x] Created activity_map.py module with GitHub-style heatmap widget
+- [x] Integrated activity heatmap into app.py dashboard
+- [x] Optimized entire layout for 7" Raspberry Pi touchscreen (800x480)
+- [x] Removed scrollbars - all content fits on one screen
+- [x] Compacted all UI elements (fonts, spacing, margins)
+- [x] Rank icons now display at 32px size (down from 48px)
+- [x] Recent matches limited to top 3 for space efficiency
+- [x] Performance stats limited to top 4 in horizontal layout
+- [x] Updated config.yaml to default to 800x480 dimensions
+- [x] Created sample rl_stats.json for testing
+- [x] Completely rewrote README.md with updated instructions
+- [x] Updated CLAUDE.md with Issue #3 completion
+
 ### 📝 Known Issues
-- **Python 3.13 Compatibility**: Original requirements.txt specified `PySide6==6.7.1` which doesn't support Python 3.13. Updated to `PySide6>=6.8.0` to support newer Python versions.
-- **Cloudflare Protection**: The scraper now includes anti-bot detection measures, but Cloudflare may still occasionally block requests. If scraping fails, try running again after a few minutes.
-- **Rank Icons**: The assets/ranks/ directory is currently empty. Users can add their own rank icon PNGs following the naming convention (e.g., `champion_i.png`, `diamond_ii.png`). The app will show emoji placeholders until icons are added.
-- **Scraper Parsing**: The current scraper successfully bypasses Cloudflare but may still have issues parsing rank data from the dynamically-rendered page. The scraper takes screenshots (scraper_debug.png) for debugging. Sample data is provided in cache for GUI testing.
+- **Python 3.13 Compatibility**: Original requirements.txt specified `PySide6==6.7.1` which doesn't support Python 3.13. Updated to `PySide6>=6.8.0` to support newer Python versions. ✅ Resolved
+- **Cloudflare Protection**: The scraper now includes anti-bot detection measures, but Cloudflare may still occasionally block requests. If scraping fails, try running again after a few minutes. This is an ongoing challenge with web scraping.
+- **Rank Icons**: The assets/ranks/ directory is currently empty. Users can add their own rank icon PNGs following the naming convention (e.g., `champion_i.png`, `diamond_ii.png`). The app will show emoji placeholders (🏆) until icons are added.
+- **Scraper Parsing**: The scraper may occasionally fail to parse match/performance data if the RL Tracker site structure changes. Debug screenshots (scraper_debug.png) are saved for troubleshooting. Sample data provided in rl_stats.json for GUI testing.
+- **Cache Location**: Changed from user cache directory to project root. ✅ Resolved in Issue #3
 
 ### 🔮 Future Enhancements (Not Yet Started)
-- [ ] Add actual rank badge images to assets/ranks/
-- [ ] Improve scraper parsing to extract data from JavaScript-rendered tables
-- [ ] Add MMR trend charts/graphs
+- [ ] Add actual rank badge PNG images to assets/ranks/
+- [ ] Add MMR trend charts/graphs over time
 - [ ] Voice assistant feedback for rank changes
 - [ ] Systemd service for auto-start on Pi
 - [ ] Settings UI panel (currently config file only)
 - [ ] Notifications for rank ups/downs
-- [ ] Multi-profile support
+- [ ] Multi-profile support (track multiple players)
 - [ ] Error handling improvements for site changes
+- [ ] API integration (if RL Tracker offers one in the future)
 
 ## How to Run
 
@@ -141,6 +182,8 @@ python app.py
 
 The GUI will auto-refresh by re-reading the cache file every 10 minutes. To get truly fresh data, re-run `scraper.py`.
 
+**Note**: A sample `rl_stats.json` file is included for testing the GUI without scraping.
+
 ## Configuration
 
 User must edit `config.yaml` before first use:
@@ -159,24 +202,31 @@ profile:
 
 3. **Error Handling**: Basic error handling exists but could be improved. If RL Tracker is down or username doesn't exist, errors may not be user-friendly.
 
-4. **Cache Location**: Stats cached at `~/.cache/rl_stats.json` by default. On Windows this expands to `C:\Users\{user}\.cache\`.
+4. **Cache Location**: Stats now cached at `rl_stats.json` in the project root directory (changed in Issue #3). This makes deployment easier and keeps all app data together.
 
 5. **Headless Browser**: Playwright runs Chromium in headless mode. First run after `playwright install chromium` may take time.
+
+6. **Pi Display**: The layout is optimized for 800x480 (7" touchscreen). For other resolutions, adjust `window_width` and `window_height` in config.yaml. The window will be fixed-size when set to 800x480 to prevent accidental resizing.
 
 6. **GUI Threading**: GUI runs on main thread. Auto-refresh reads from cache (not blocking), but if you integrate scraping into the GUI, use QThread to avoid freezing.
 
 ## Development Context
 
 ### Last Session Summary
-- Completed Issue #2: Fix Scraper Timeouts & Bind Rank Icons
-- Fixed Cloudflare bot detection by adding anti-detection measures (user agent, viewport, init scripts)
-- Rewrote scraper selectors to work with client-side rendered content
-- Created rank_map.py module for mapping rank text to icon files
-- Updated app.py to display rank icons with emoji fallbacks
-- Added improved error handling and debugging features (screenshots, tracebacks)
-- Created sample data in cache file for testing GUI
-- Updated CLAUDE.md with Issue #2 completion status
-- Ready to commit and push changes
+- Completed Issue #3: Fix Cache Save Path, Integrate Rank Images, and Add Play Activity Heatmap
+- Changed cache from `~/.cache/rl_stats.json` to project root `rl_stats.json`
+- Created activity_map.py module for GitHub-style play activity heatmap
+- Added date parsing (absolute and relative) to match scraping
+- Optimized entire layout for 7" Raspberry Pi touchscreen (800x480)
+- Made UI compact with no scrollbars - all content fits on one screen
+- Integrated rank icons at 32px size (compact)
+- Integrated activity heatmap widget into dashboard
+- Compacted all sections (ranks, matches, performance) for space efficiency
+- Updated config.yaml to default to Pi display dimensions
+- Created sample rl_stats.json for testing
+- Completely rewrote README.md with comprehensive instructions
+- Updated CLAUDE.md with Issue #3 completion status
+- Ready to commit and push changes, then close Issue #3
 
 ### Repository Info
 - **GitHub**: https://github.com/JuliusShade/RL-Tracker
@@ -229,4 +279,4 @@ If you're a new Claude instance picking this up:
 ---
 
 **Last Updated**: 2025-11-11
-**Status**: MVP Complete, Ready for Enhancements
+**Status**: Issue #3 Complete - Pi Display Optimized, Ready for Deployment
