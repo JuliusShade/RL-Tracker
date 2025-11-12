@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QLabel, QScrollArea, QPushButton, QGridLayout, QFrame
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap, QFont
+from PySide6.QtGui import QPixmap, QFont, QPalette, QColor
 from rank_map import rank_icon_path
 from activity_map import parse_activity_data, build_heatmap_widget
 
@@ -117,13 +117,23 @@ class RLStatsApp(QMainWindow):
     def apply_theme(self):
         """Apply color theme to the application"""
         if self.config['display']['theme'] == 'dark':
+            # Set application palette for dark theme
+            palette = QPalette()
+            palette.setColor(QPalette.Window, QColor(26, 26, 26))
+            palette.setColor(QPalette.WindowText, QColor(255, 255, 255))
+            palette.setColor(QPalette.Base, QColor(45, 45, 45))
+            palette.setColor(QPalette.AlternateBase, QColor(35, 35, 35))
+            palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+            palette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
+            palette.setColor(QPalette.Text, QColor(255, 255, 255))
+            palette.setColor(QPalette.Button, QColor(45, 45, 45))
+            palette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+            palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
+            self.setPalette(palette)
+
             self.setStyleSheet("""
                 QMainWindow {
                     background-color: #1a1a1a;
-                    color: #ffffff;
-                }
-                QLabel {
-                    color: #ffffff;
                 }
                 QPushButton {
                     background-color: #0078d4;
@@ -137,14 +147,14 @@ class RLStatsApp(QMainWindow):
                 QPushButton:hover {
                     background-color: #106ebe;
                 }
-                QScrollArea {
-                    border: none;
-                    background-color: #1a1a1a;
-                }
                 QFrame {
                     background-color: #2d2d2d;
                     border-radius: 10px;
                     padding: 15px;
+                }
+                /* Force all text to be white */
+                * {
+                    color: #ffffff;
                 }
             """)
         else:
@@ -210,11 +220,23 @@ class RLStatsApp(QMainWindow):
         self.stats_layout.addWidget(msg)
 
     def clear_stats_layout(self):
-        """Clear all widgets from stats layout"""
+        """Clear all widgets and layouts from stats layout"""
         while self.stats_layout.count():
             child = self.stats_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+            elif child.layout():
+                # Recursively clear nested layouts
+                self._clear_layout(child.layout())
+
+    def _clear_layout(self, layout):
+        """Recursively clear a layout"""
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+            elif child.layout():
+                self._clear_layout(child.layout())
 
     def display_stats(self, data):
         """Display stats in the UI"""
@@ -278,6 +300,7 @@ class RLStatsApp(QMainWindow):
         # Section title - compact
         title = QLabel("Ranks")
         title.setFont(QFont("Arial", 12, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
         layout.addWidget(title)
 
         # Vertical list for playlists (more compact than grid)
@@ -311,21 +334,23 @@ class RLStatsApp(QMainWindow):
             # Text info - horizontal for space efficiency
             # Playlist name
             name_label = QLabel(playlist_name[:12])  # Truncate if too long
-            name_label.setFont(QFont("Arial", 9, QFont.Bold))
-            name_label.setFixedWidth(80)
+            name_label.setFont(QFont("Arial", 10, QFont.Bold))
+            name_label.setStyleSheet("color: #ffffff;")
+            name_label.setFixedWidth(90)
             playlist_layout.addWidget(name_label)
 
             # Rank
             rank_label = QLabel(rank_text)
-            rank_label.setFont(QFont("Arial", 9))
+            rank_label.setFont(QFont("Arial", 10))
             rank_label.setStyleSheet("color: #4ecdc4;")
-            rank_label.setFixedWidth(100)
+            rank_label.setFixedWidth(110)
             playlist_layout.addWidget(rank_label)
 
             # MMR
             mmr = stats.get('mmr', 0)
             mmr_label = QLabel(f"{int(mmr)} MMR")
-            mmr_label.setFont(QFont("Arial", 9))
+            mmr_label.setFont(QFont("Arial", 10))
+            mmr_label.setStyleSheet("color: #ffffff;")
             mmr_label.setAlignment(Qt.AlignRight)
             playlist_layout.addWidget(mmr_label)
 
@@ -344,6 +369,7 @@ class RLStatsApp(QMainWindow):
         # Section title
         title = QLabel("Recent Matches")
         title.setFont(QFont("Arial", 11, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
         layout.addWidget(title)
 
         # Match list - show only top 3 for compact layout
@@ -371,8 +397,9 @@ class RLStatsApp(QMainWindow):
             playlist = match.get('playlist', 'Unknown')
             playlist_short = playlist.replace('Ranked Doubles', '2v2').replace('Ranked Duel', '1v1').replace('Ranked Standard', '3v3')
             playlist_label = QLabel(playlist_short[:10])
-            playlist_label.setFont(QFont("Arial", 9))
-            playlist_label.setFixedWidth(60)
+            playlist_label.setFont(QFont("Arial", 10))
+            playlist_label.setStyleSheet("color: #ffffff;")
+            playlist_label.setFixedWidth(70)
             match_layout.addWidget(playlist_label)
 
             match_layout.addStretch()
@@ -380,7 +407,7 @@ class RLStatsApp(QMainWindow):
             # MMR change
             mmr_change = match.get('mmr_change', '0')
             mmr_label = QLabel(mmr_change)
-            mmr_label.setFont(QFont("Arial", 9, QFont.Bold))
+            mmr_label.setFont(QFont("Arial", 10, QFont.Bold))
             if '+' in mmr_change or (mmr_change.replace('.', '').replace('-', '').isdigit() and mmr_change.startswith('+')):
                 mmr_label.setStyleSheet("color: #51cf66;")
             elif '-' in mmr_change:
@@ -402,6 +429,7 @@ class RLStatsApp(QMainWindow):
         # Section title
         title = QLabel("Performance")
         title.setFont(QFont("Arial", 11, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
         layout.addWidget(title)
 
         # Horizontal layout for stats (more compact)
