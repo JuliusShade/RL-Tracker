@@ -152,9 +152,8 @@ class RLStatsApp(QMainWindow):
                     border-radius: 10px;
                     padding: 15px;
                 }
-                /* Force all text to be white */
-                * {
-                    color: #ffffff;
+                QLabel {
+                    color: white;
                 }
             """)
         else:
@@ -300,7 +299,7 @@ class RLStatsApp(QMainWindow):
         # Section title - compact
         title = QLabel("Ranks")
         title.setFont(QFont("Arial", 12, QFont.Bold))
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
         layout.addWidget(title)
 
         # Vertical list for playlists (more compact than grid)
@@ -335,14 +334,14 @@ class RLStatsApp(QMainWindow):
             # Playlist name
             name_label = QLabel(playlist_name[:12])  # Truncate if too long
             name_label.setFont(QFont("Arial", 10, QFont.Bold))
-            name_label.setStyleSheet("color: #ffffff;")
+            name_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             name_label.setFixedWidth(90)
             playlist_layout.addWidget(name_label)
 
             # Rank
             rank_label = QLabel(rank_text)
             rank_label.setFont(QFont("Arial", 10))
-            rank_label.setStyleSheet("color: #4ecdc4;")
+            rank_label.setStyleSheet("color: #4ecdc4 !important; background-color: transparent;")
             rank_label.setFixedWidth(110)
             playlist_layout.addWidget(rank_label)
 
@@ -350,7 +349,7 @@ class RLStatsApp(QMainWindow):
             mmr = stats.get('mmr', 0)
             mmr_label = QLabel(f"{int(mmr)} MMR")
             mmr_label.setFont(QFont("Arial", 10))
-            mmr_label.setStyleSheet("color: #ffffff;")
+            mmr_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             mmr_label.setAlignment(Qt.AlignRight)
             playlist_layout.addWidget(mmr_label)
 
@@ -369,7 +368,7 @@ class RLStatsApp(QMainWindow):
         # Section title
         title = QLabel("Recent Matches")
         title.setFont(QFont("Arial", 11, QFont.Bold))
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
         layout.addWidget(title)
 
         # Match list - show only top 3 for compact layout
@@ -398,7 +397,7 @@ class RLStatsApp(QMainWindow):
             playlist_short = playlist.replace('Ranked Doubles', '2v2').replace('Ranked Duel', '1v1').replace('Ranked Standard', '3v3')
             playlist_label = QLabel(playlist_short[:10])
             playlist_label.setFont(QFont("Arial", 10))
-            playlist_label.setStyleSheet("color: #ffffff;")
+            playlist_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             playlist_label.setFixedWidth(70)
             match_layout.addWidget(playlist_label)
 
@@ -429,7 +428,7 @@ class RLStatsApp(QMainWindow):
         # Section title
         title = QLabel("Performance")
         title.setFont(QFont("Arial", 11, QFont.Bold))
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
         layout.addWidget(title)
 
         # Horizontal layout for stats (more compact)
