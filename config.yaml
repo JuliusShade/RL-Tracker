@@ -1,0 +1,27 @@
+# RL Stats Display Configuration
+
+# Rocket League Tracker profile settings
+profile:
+  platform: "epic"  # Options: epic, steam, psn, xbl
+  username: "Dragflex"  # Your RL Tracker username
+
+# URLs for scraping (auto-generated from profile settings)
+urls:
+  overview: "https://rocketleague.tracker.network/rocket-league/profile/{platform}/{username}/overview"
+  matches: "https://rocketleague.tracker.network/rocket-league/profile/{platform}/{username}/matches"
+  mmr: "https://rocketleague.tracker.network/rocket-league/profile/{platform}/{username}/mmr?playlist=11"
+  performance: "https://rocketleague.tracker.network/rocket-league/profile/{platform}/{username}/performance"
+
+# Refresh settings
+refresh:
+  interval_minutes: 10  # How often to scrape new data
+
+# Cache settings
+cache:
+  path: "~/.cache/rl_stats.json"  # Where to store cached stats
+
+# Display settings
+display:
+  window_width: 800
+  window_height: 600
+  theme: "dark"  # Options: dark, light
