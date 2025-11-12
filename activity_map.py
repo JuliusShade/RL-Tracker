@@ -89,12 +89,11 @@ def build_heatmap_widget(activity_counts, days=30):
         # Create label
         day_label = QLabel()
         day_label.setFixedSize(24, 24)
-        day_label.setAutoFillBackground(True)
 
         # Calculate color intensity (orange scale: dark gray -> bright orange)
         if count == 0:
             # No activity - dark gray
-            color = QColor(45, 45, 45)
+            bg_color = "rgb(45, 45, 45)"
         else:
             # Scale from dim orange to bright orange
             intensity = count / max_activity
@@ -102,16 +101,12 @@ def build_heatmap_widget(activity_counts, days=30):
             red = 255
             green = int(50 + (140 - 50) * intensity)
             blue = 0
-            color = QColor(red, green, blue)
+            bg_color = f"rgb({red}, {green}, {blue})"
 
-        # Apply color
-        pal = day_label.palette()
-        pal.setColor(QPalette.Window, color)
-        day_label.setPalette(pal)
-
-        # Add border for better visibility
+        # Apply color via stylesheet (overrides global stylesheet)
         day_label.setStyleSheet(f"""
             QLabel {{
+                background-color: {bg_color};
                 border: 1px solid #1a1a1a;
                 border-radius: 3px;
             }}
@@ -144,11 +139,14 @@ def build_heatmap_widget(activity_counts, days=30):
     for color in legend_colors:
         square = QLabel()
         square.setFixedSize(12, 12)
-        square.setAutoFillBackground(True)
-        pal = square.palette()
-        pal.setColor(QPalette.Window, color)
-        square.setPalette(pal)
-        square.setStyleSheet("border: 1px solid #1a1a1a; border-radius: 2px;")
+        # Use stylesheet for color (overrides global stylesheet)
+        square.setStyleSheet(f"""
+            QLabel {{
+                background-color: rgb({color.red()}, {color.green()}, {color.blue()});
+                border: 1px solid #1a1a1a;
+                border-radius: 2px;
+            }}
+        """)
         legend_layout.addWidget(square)
 
     more_label = QLabel("More")
