@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QScrollArea, QPushButton, QGridLayout, QFrame
+    QLabel, QScrollArea, QPushButton, QGridLayout, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QFont, QPalette, QColor
@@ -150,10 +150,14 @@ class RLStatsApp(QMainWindow):
                 QFrame {
                     background-color: #2d2d2d;
                     border-radius: 10px;
-                    padding: 15px;
                 }
                 QLabel {
-                    color: white;
+                    color: #ffffff;
+                    background: transparent;
+                }
+                QFrame QLabel {
+                    color: #ffffff;
+                    background: transparent;
                 }
             """)
         else:
@@ -178,7 +182,14 @@ class RLStatsApp(QMainWindow):
                     background-color: #ffffff;
                     border: 1px solid #cccccc;
                     border-radius: 10px;
-                    padding: 15px;
+                }
+                QLabel {
+                    color: #000000;
+                    background: transparent;
+                }
+                QFrame QLabel {
+                    color: #000000;
+                    background: transparent;
                 }
             """)
 
@@ -257,9 +268,13 @@ class RLStatsApp(QMainWindow):
             except:
                 self.updated_label.setText(f"Updated: {timestamp}")
 
-        # Create horizontal layout for ranks and activity
-        top_row = QHBoxLayout()
+        # Create horizontal layout for ranks and activity - wrap in container
+        top_row_container = QWidget()
+        top_row_container.setMinimumHeight(150)
+        top_row_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        top_row = QHBoxLayout(top_row_container)
         top_row.setSpacing(10)
+        top_row.setContentsMargins(0, 0, 0, 0)
 
         # Display rank information
         overview = data.get('overview', {})
@@ -272,9 +287,11 @@ class RLStatsApp(QMainWindow):
         if matches:
             activity_data = parse_activity_data(matches)
             heatmap_widget = build_heatmap_widget(activity_data, days=30)
+            heatmap_widget.setMinimumHeight(150)
+            heatmap_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
             top_row.addWidget(heatmap_widget, stretch=2)
 
-        self.stats_layout.addLayout(top_row)
+        self.stats_layout.addWidget(top_row_container)
 
         # Display recent matches (compact)
         if matches:
@@ -292,6 +309,8 @@ class RLStatsApp(QMainWindow):
     def create_ranks_section(self, overview):
         """Create the ranks display section - compact for Pi"""
         frame = QFrame()
+        frame.setMinimumHeight(150)  # Ensure frame is tall enough for title + 3 rows
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout = QVBoxLayout(frame)
         layout.setSpacing(5)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -300,12 +319,14 @@ class RLStatsApp(QMainWindow):
         title = QLabel("Ranks")
         title.setFont(QFont("Arial", 12, QFont.Bold))
         title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
+        title.setMinimumHeight(18)
         layout.addWidget(title)
 
         # Vertical list for playlists (more compact than grid)
         for playlist_name, stats in overview.items():
             # Create playlist widget
             playlist_widget = QWidget()
+            playlist_widget.setMinimumHeight(36)  # Ensure container is tall enough for content
             playlist_layout = QHBoxLayout(playlist_widget)
             playlist_layout.setSpacing(8)
             playlist_layout.setContentsMargins(0, 2, 0, 2)
@@ -336,6 +357,7 @@ class RLStatsApp(QMainWindow):
             name_label.setFont(QFont("Arial", 10, QFont.Bold))
             name_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             name_label.setFixedWidth(90)
+            name_label.setMinimumHeight(16)
             playlist_layout.addWidget(name_label)
 
             # Rank
@@ -343,6 +365,7 @@ class RLStatsApp(QMainWindow):
             rank_label.setFont(QFont("Arial", 10))
             rank_label.setStyleSheet("color: #4ecdc4 !important; background-color: transparent;")
             rank_label.setFixedWidth(110)
+            rank_label.setMinimumHeight(16)
             playlist_layout.addWidget(rank_label)
 
             # MMR
@@ -351,6 +374,7 @@ class RLStatsApp(QMainWindow):
             mmr_label.setFont(QFont("Arial", 10))
             mmr_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             mmr_label.setAlignment(Qt.AlignRight)
+            mmr_label.setMinimumHeight(16)
             playlist_layout.addWidget(mmr_label)
 
             playlist_layout.addStretch()
@@ -361,6 +385,8 @@ class RLStatsApp(QMainWindow):
     def create_matches_section(self, matches):
         """Create the recent matches section - compact"""
         frame = QFrame()
+        frame.setMinimumHeight(90)  # Ensure frame is tall enough for title + 3 matches
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout = QVBoxLayout(frame)
         layout.setSpacing(3)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -369,11 +395,13 @@ class RLStatsApp(QMainWindow):
         title = QLabel("Recent Matches")
         title.setFont(QFont("Arial", 11, QFont.Bold))
         title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
+        title.setMinimumHeight(18)
         layout.addWidget(title)
 
         # Match list - show only top 3 for compact layout
         for i, match in enumerate(matches[:3], 1):
             match_widget = QWidget()
+            match_widget.setMinimumHeight(20)  # Ensure container is tall enough for content
             match_layout = QHBoxLayout(match_widget)
             match_layout.setContentsMargins(0, 1, 0, 1)
             match_layout.setSpacing(6)
@@ -384,6 +412,7 @@ class RLStatsApp(QMainWindow):
             result_label = QLabel(result_short)
             result_label.setFont(QFont("Arial", 10, QFont.Bold))
             result_label.setFixedWidth(15)
+            result_label.setMinimumHeight(16)
 
             if result_short == "W":
                 result_label.setStyleSheet("color: #51cf66;")
@@ -399,6 +428,7 @@ class RLStatsApp(QMainWindow):
             playlist_label.setFont(QFont("Arial", 10))
             playlist_label.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             playlist_label.setFixedWidth(70)
+            playlist_label.setMinimumHeight(16)
             match_layout.addWidget(playlist_label)
 
             match_layout.addStretch()
@@ -407,6 +437,7 @@ class RLStatsApp(QMainWindow):
             mmr_change = match.get('mmr_change', '0')
             mmr_label = QLabel(mmr_change)
             mmr_label.setFont(QFont("Arial", 10, QFont.Bold))
+            mmr_label.setMinimumHeight(16)
             if '+' in mmr_change or (mmr_change.replace('.', '').replace('-', '').isdigit() and mmr_change.startswith('+')):
                 mmr_label.setStyleSheet("color: #51cf66;")
             elif '-' in mmr_change:
@@ -421,6 +452,8 @@ class RLStatsApp(QMainWindow):
     def create_performance_section(self, performance):
         """Create the performance metrics section - compact"""
         frame = QFrame()
+        frame.setMinimumHeight(80)  # Ensure frame is tall enough for title + stats row
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout = QVBoxLayout(frame)
         layout.setSpacing(3)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -429,6 +462,7 @@ class RLStatsApp(QMainWindow):
         title = QLabel("Performance")
         title.setFont(QFont("Arial", 11, QFont.Bold))
         title.setStyleSheet("color: #ffffff !important; background-color: transparent;")
+        title.setMinimumHeight(18)
         layout.addWidget(title)
 
         # Horizontal layout for stats (more compact)
@@ -443,6 +477,7 @@ class RLStatsApp(QMainWindow):
                 break
 
             stat_widget = QWidget()
+            stat_widget.setMinimumHeight(36)  # Ensure container is tall enough for content
             stat_vlayout = QVBoxLayout(stat_widget)
             stat_vlayout.setSpacing(1)
             stat_vlayout.setContentsMargins(0, 0, 0, 0)
@@ -452,12 +487,15 @@ class RLStatsApp(QMainWindow):
             label_widget.setFont(QFont("Arial", 8))
             label_widget.setStyleSheet("color: #999999;")
             label_widget.setAlignment(Qt.AlignCenter)
+            label_widget.setMinimumHeight(14)
             stat_vlayout.addWidget(label_widget)
 
             # Stat value
             value_widget = QLabel(str(value))
             value_widget.setFont(QFont("Arial", 11, QFont.Bold))
+            value_widget.setStyleSheet("color: #ffffff !important; background-color: transparent;")
             value_widget.setAlignment(Qt.AlignCenter)
+            value_widget.setMinimumHeight(18)
             stat_vlayout.addWidget(value_widget)
 
             stats_layout.addWidget(stat_widget)
