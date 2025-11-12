@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QFont
+from rank_map import rank_icon_path
 
 
 class RLStatsApp(QMainWindow):
@@ -263,26 +264,54 @@ class RLStatsApp(QMainWindow):
         for playlist_name, stats in overview.items():
             # Create playlist widget
             playlist_widget = QWidget()
-            playlist_layout = QVBoxLayout(playlist_widget)
-            playlist_layout.setSpacing(5)
+            playlist_layout = QHBoxLayout(playlist_widget)
+            playlist_layout.setSpacing(10)
+
+            # Rank icon
+            rank_text = stats.get('rank', 'Unranked')
+            icon_file = rank_icon_path(rank_text)
+
+            rank_icon = QLabel()
+            if icon_file.exists():
+                pixmap = QPixmap(str(icon_file))
+                # Scale to reasonable size
+                scaled_pixmap = pixmap.scaledToHeight(48, Qt.SmoothTransformation)
+                rank_icon.setPixmap(scaled_pixmap)
+                rank_icon.setFixedSize(48, 48)
+            else:
+                # Placeholder if icon doesn't exist
+                rank_icon.setText("🏆")
+                rank_icon.setFont(QFont("Arial", 24))
+                rank_icon.setAlignment(Qt.AlignCenter)
+                rank_icon.setFixedSize(48, 48)
+
+            playlist_layout.addWidget(rank_icon)
+
+            # Text info (vertical layout)
+            text_widget = QWidget()
+            text_layout = QVBoxLayout(text_widget)
+            text_layout.setSpacing(2)
+            text_layout.setContentsMargins(0, 0, 0, 0)
 
             # Playlist name
             name_label = QLabel(playlist_name)
-            name_label.setFont(QFont("Arial", 12, QFont.Bold))
-            playlist_layout.addWidget(name_label)
+            name_label.setFont(QFont("Arial", 11, QFont.Bold))
+            text_layout.addWidget(name_label)
 
             # Rank
-            rank = stats.get('rank', 'Unranked')
-            rank_label = QLabel(rank)
-            rank_label.setFont(QFont("Arial", 14))
+            rank_label = QLabel(rank_text)
+            rank_label.setFont(QFont("Arial", 12))
             rank_label.setStyleSheet("color: #4ecdc4;")
-            playlist_layout.addWidget(rank_label)
+            text_layout.addWidget(rank_label)
 
             # MMR
             mmr = stats.get('mmr', 0)
             mmr_label = QLabel(f"MMR: {mmr}")
-            mmr_label.setFont(QFont("Arial", 12))
-            playlist_layout.addWidget(mmr_label)
+            mmr_label.setFont(QFont("Arial", 10))
+            text_layout.addWidget(mmr_label)
+
+            playlist_layout.addWidget(text_widget)
+            playlist_layout.addStretch()
 
             grid.addWidget(playlist_widget, row, col)
 

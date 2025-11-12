@@ -40,130 +40,229 @@ class RLTrackerScraper:
     def scrape_overview(self, page):
         """Scrape overview page for rank information"""
         try:
-            page.goto(self.config['urls']['overview'], timeout=30000)
-            page.wait_for_load_state('networkidle', timeout=30000)
+            page.goto(self.config['urls']['overview'], timeout=60000)
+
+            # Wait for the main content to load - look for the profile name/title
+            page.wait_for_selector('h1, [class*="profile"]', timeout=15000)
+
+            # Give the page additional time to fully render
+            page.wait_for_timeout(3000)
+
+            # Take screenshot for debugging
+            page.screenshot(path="scraper_debug.png")
 
             stats = {}
 
-            # Wait for playlist stats to load
-            page.wait_for_selector('.playlist', timeout=10000)
+            # Try to find rank cards/sections - these are usually in containers
+            # Modern tracker.gg sites use data attributes and specific class patterns
+            playlist_selectors = [
+                '[class*="playlist"]',
+                '[class*="rank-card"]',
+                '[class*="mode"]',
+                '[data-mode]',
+                'div[class*="giant-stat"]',  # Tracker.gg specific
+            ]
 
-            # Get all playlists
-            playlists = page.query_selector_all('.playlist')
-
-            for playlist in playlists:
+            playlists = []
+            for selector in playlist_selectors:
                 try:
-                    # Get playlist name
-                    name_elem = playlist.query_selector('.playlist__name')
-                    if not name_elem:
+                    elements = page.query_selector_all(selector)
+                    if elements and len(elements) > 0:
+                        playlists = elements
+                        print(f"Found {len(playlists)} elements with selector: {selector}")
+                        break
+                except:
+                    continue
+
+            if not playlists:
+                print("No playlist elements found with any selector")
+                # Try to extract any text that looks like rank data
+                all_text = page.inner_text('body')
+                print(f"Page body text (first 500 chars): {all_text[:500]}")
+                return stats
+
+            for i, playlist in enumerate(playlists):
+                try:
+                    # Get all text from this element
+                    text = playlist.inner_text()
+
+                    # Skip if too short or looks like navigation
+                    if len(text) < 3 or 'Login' in text or 'Sign' in text:
                         continue
 
-                    playlist_name = name_elem.inner_text().strip()
+                    # Try to parse rank information from text
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-                    # Get rank
-                    rank_elem = playlist.query_selector('.rank__name')
-                    rank = rank_elem.inner_text().strip() if rank_elem else "Unranked"
+                    if len(lines) >= 2:
+                        # Common patterns: mode name, rank, MMR
+                        playlist_name = lines[0]
+                        rank_text = "Unranked"
+                        mmr_val = 0.0
 
-                    # Get division
-                    div_elem = playlist.query_selector('.rank__division')
-                    division = div_elem.inner_text().strip() if div_elem else ""
+                        for line in lines[1:]:
+                            # Look for rank names
+                            if any(rank in line.lower() for rank in ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'champion', 'grand champion', 'supersonic legend']):
+                                rank_text = line
+                            # Look for MMR (numeric value, possibly with comma)
+                            elif line.replace(',', '').replace('.', '').isdigit():
+                                mmr_val = float(line.replace(',', ''))
 
-                    # Get MMR
-                    mmr_elem = playlist.query_selector('.rank__mmr')
-                    mmr = mmr_elem.inner_text().strip() if mmr_elem else "0"
+                        if playlist_name and (rank_text != "Unranked" or mmr_val > 0):
+                            stats[playlist_name] = {
+                                'rank': rank_text,
+                                'mmr': mmr_val
+                            }
+                            print(f"Parsed: {playlist_name} - {rank_text} ({mmr_val} MMR)")
 
-                    # Clean up MMR (remove non-numeric characters except decimals)
-                    mmr_clean = ''.join(c for c in mmr if c.isdigit() or c == '.')
-
-                    full_rank = f"{rank} {division}".strip()
-
-                    stats[playlist_name] = {
-                        'rank': full_rank,
-                        'mmr': float(mmr_clean) if mmr_clean else 0.0
-                    }
                 except Exception as e:
-                    print(f"Error parsing playlist: {e}")
+                    print(f"Error parsing playlist {i}: {e}")
                     continue
 
             return stats
 
         except Exception as e:
             print(f"Error scraping overview: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
 
     def scrape_matches(self, page):
         """Scrape recent match history"""
         try:
-            page.goto(self.config['urls']['matches'], timeout=30000)
-            page.wait_for_load_state('networkidle', timeout=30000)
+            page.goto(self.config['urls']['matches'], timeout=60000)
+            page.wait_for_selector('h1, [class*="profile"]', timeout=15000)
+            page.wait_for_timeout(3000)
 
             matches = []
 
-            # Wait for matches to load
-            page.wait_for_selector('.match', timeout=10000)
+            # Look for match/game history containers
+            match_selectors = [
+                '[class*="match"]',
+                '[class*="game"]',
+                '[class*="session"]',
+                'tr[class*="row"]'
+            ]
 
-            # Get recent matches (limit to 10)
-            match_elements = page.query_selector_all('.match')[:10]
-
-            for match in match_elements:
+            match_elements = []
+            for selector in match_selectors:
                 try:
-                    # Get result (Win/Loss)
-                    result_elem = match.query_selector('.match__result')
-                    result = result_elem.inner_text().strip() if result_elem else "Unknown"
+                    elements = page.query_selector_all(selector)
+                    if elements and len(elements) >= 3:  # At least a few matches
+                        match_elements = elements[:10]  # Limit to 10
+                        print(f"Found {len(elements)} match elements with selector: {selector}")
+                        break
+                except:
+                    continue
 
-                    # Get playlist
-                    playlist_elem = match.query_selector('.match__playlist')
-                    playlist = playlist_elem.inner_text().strip() if playlist_elem else "Unknown"
+            if not match_elements:
+                print("No match elements found")
+                return matches
 
-                    # Get MMR change
-                    mmr_elem = match.query_selector('.match__mmr-change')
-                    mmr_change = mmr_elem.inner_text().strip() if mmr_elem else "0"
+            for i, match in enumerate(match_elements):
+                try:
+                    text = match.inner_text()
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
 
-                    matches.append({
-                        'result': result,
-                        'playlist': playlist,
-                        'mmr_change': mmr_change
-                    })
+                    # Skip navigation/header elements
+                    if len(lines) < 2:
+                        continue
+
+                    # Try to parse match info
+                    result = "Unknown"
+                    playlist = "Unknown"
+                    mmr_change = "0"
+
+                    for line in lines:
+                        if any(w in line.lower() for w in ['win', 'victory', 'defeat', 'loss']):
+                            result = line
+                        elif any(w in line.lower() for w in ['doubles', 'duel', 'standard', 'ranked']):
+                            playlist = line
+                        elif '+' in line or '-' in line:
+                            if any(c.isdigit() for c in line):
+                                mmr_change = line
+
+                    if result != "Unknown" or playlist != "Unknown":
+                        matches.append({
+                            'result': result,
+                            'playlist': playlist,
+                            'mmr_change': mmr_change
+                        })
+
                 except Exception as e:
-                    print(f"Error parsing match: {e}")
+                    print(f"Error parsing match {i}: {e}")
                     continue
 
             return matches
 
         except Exception as e:
             print(f"Error scraping matches: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def scrape_performance(self, page):
         """Scrape performance metrics"""
         try:
-            page.goto(self.config['urls']['performance'], timeout=30000)
-            page.wait_for_load_state('networkidle', timeout=30000)
+            page.goto(self.config['urls']['performance'], timeout=60000)
+            page.wait_for_selector('h1, [class*="profile"]', timeout=15000)
+            page.wait_for_timeout(3000)
 
             performance = {}
 
-            # Wait for stats to load
-            page.wait_for_selector('.stat', timeout=10000)
+            # Look for stat containers
+            stat_selectors = [
+                '[class*="stat"]',
+                '[class*="metric"]',
+                'div[class*="giant"]'
+            ]
 
-            # Get performance stats
-            stats = page.query_selector_all('.stat')
-
-            for stat in stats:
+            stat_elements = []
+            for selector in stat_selectors:
                 try:
-                    label_elem = stat.query_selector('.stat__label')
-                    value_elem = stat.query_selector('.stat__value')
+                    elements = page.query_selector_all(selector)
+                    if elements and len(elements) >= 3:
+                        stat_elements = elements
+                        print(f"Found {len(elements)} stat elements with selector: {selector}")
+                        break
+                except:
+                    continue
 
-                    if label_elem and value_elem:
-                        label = label_elem.inner_text().strip()
-                        value = value_elem.inner_text().strip()
-                        performance[label] = value
+            if not stat_elements:
+                print("No performance stat elements found")
+                return performance
+
+            for i, stat in enumerate(stat_elements):
+                try:
+                    text = stat.inner_text()
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
+
+                    # Skip if too short
+                    if len(lines) < 2:
+                        continue
+
+                    # Try to pair label with value
+                    for j in range(len(lines) - 1):
+                        label = lines[j]
+                        value = lines[j + 1]
+
+                        # Skip navigation items
+                        if any(skip in label.lower() for skip in ['login', 'sign', 'menu', 'nav']):
+                            continue
+
+                        # If we have a label and numeric-ish value, store it
+                        if len(label) > 1 and (value.replace(',', '').replace('.', '').replace('%', '').isdigit() or any(c.isdigit() for c in value)):
+                            performance[label] = value
+
                 except Exception as e:
+                    print(f"Error parsing stat {i}: {e}")
                     continue
 
             return performance
 
         except Exception as e:
             print(f"Error scraping performance: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
 
     def scrape_all(self):
@@ -172,9 +271,30 @@ class RLTrackerScraper:
 
         with sync_playwright() as p:
             try:
-                # Launch browser
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
+                # Launch browser with options to avoid detection
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--disable-dev-shm-usage',
+                        '--no-sandbox',
+                    ]
+                )
+
+                # Create context with realistic settings
+                context = browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+
+                page = context.new_page()
+
+                # Remove webdriver property
+                page.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                """)
 
                 # Scrape all pages
                 print("Scraping overview...")
@@ -206,6 +326,8 @@ class RLTrackerScraper:
 
             except Exception as e:
                 print(f"Error during scraping: {e}")
+                import traceback
+                traceback.print_exc()
                 return None
 
 
