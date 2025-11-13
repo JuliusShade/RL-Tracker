@@ -101,59 +101,63 @@ profile:
 
 ## 🎮 Usage
 
-### Recommended Workflow
+### Recommended Workflow (Best for Avoiding Cloudflare)
 
-The app uses a two-step process to avoid Cloudflare bot detection:
+The easiest and most reliable way to use the app is to keep your RL Tracker page open in Edge:
 
-#### Step 1: Download HTML from RL Tracker
+#### Step 1: Start Edge with Remote Debugging
 
-First, start Edge with remote debugging enabled:
+**Close ALL Edge windows first**, then open PowerShell and run:
 
 **Windows**:
 ```powershell
-& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\temp\edge_debug"
+Start-Process "msedge.exe" -ArgumentList "--remote-debugging-port=9222"
 ```
 
 **Mac/Linux**:
 ```bash
-google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome_debug
+google-chrome --remote-debugging-port=9222 &
 ```
 
-Then run the scraper to download the HTML:
-```bash
-python scraper_cdp_auto.py
+This opens Edge with your **normal profile** (cookies, history, extensions intact) - no Cloudflare detection!
+
+#### Step 2: Open RL Tracker Page
+
+In that Edge window, navigate to your profile:
+```
+https://rocketleague.tracker.network/rocket-league/profile/{platform}/{username}/overview
 ```
 
-This will:
-- Connect to your open browser
-- Navigate to your RL Tracker profile
-- Wait for Cloudflare verification (if needed - complete it manually in the browser)
-- Save the HTML to `data/html/overview.html`
-- Automatically run the parser
+Replace `{platform}` with your platform (epic/steam/psn/xbl) and `{username}` with your username.
 
-#### Step 2: Parse and Display
+**Keep this tab open!** RL Tracker auto-refreshes stats every 5 minutes.
 
-The parser runs automatically after scraping, but you can also run it manually:
+#### Step 3: Launch the App
 
 ```bash
-python parser.py  # Extract data from saved HTML
-python app.py     # Launch GUI
+python app.py
 ```
 
 The GUI will:
-- Load stats from cache
 - Display current ranks with rank icons
 - Show lifetime stats (wins, goals, assists, saves, MVPs, etc.)
 - Display play activity heatmap (last 30 days)
 - Show recent gaming sessions with match counts
 - Display stats breakdown pie chart
-- Auto-refresh every 10 minutes
 
-### Manual Refresh
+#### Step 4: Refresh Stats
 
-To get fresh data:
-1. Re-run `python scraper_cdp_auto.py` (downloads new HTML)
-2. Click "Refresh" button in the app (reloads from cache)
+Click the **Refresh** button in the app anytime to update stats. The app will:
+- ✅ Detect your open RL Tracker tab
+- ✅ Grab the HTML from that tab (instant, no navigation!)
+- ✅ Parse the data and update the display
+- ✅ No Cloudflare issues (using your real browser session)
+
+**Note**: The RL Tracker site auto-refreshes every 5 minutes, or you can manually refresh the page in your browser before clicking the app's refresh button.
+
+### Alternative: Automatic Navigation (Less Reliable)
+
+If you don't have the page open, the app will attempt to navigate automatically, but this may trigger Cloudflare verification. It's recommended to keep the page open as described above.
 
 ## ✨ Features
 
@@ -172,10 +176,12 @@ To get fresh data:
 - ⚙️ **Configurable** - theme, size, refresh interval via config.yaml
 
 ### Technical
-- 🛡️ **Cloudflare bypass** - uses real browser, avoids bot detection
-- 💾 **Offline parsing** - BeautifulSoup extracts data from saved HTML
-- 📦 **Local caching** - stores data in project directory
+- 🛡️ **Cloudflare bypass** - uses your real browser with existing tabs, zero automation detection
+- 💾 **Offline parsing** - BeautifulSoup extracts data from HTML
+- 📦 **Smart tab detection** - automatically finds and reuses open RL Tracker tabs
+- 📂 **Local caching** - stores data in project directory
 - 🔧 **Config-driven** - easy customization via YAML
+- 🔌 **Chrome DevTools Protocol** - connects to browser without automation flags
 
 ## ⚙️ Configuration
 
@@ -339,9 +345,22 @@ Add:
 ## 🎯 Recent Updates
 
 ### Latest (November 2025)
+
+✅ **Smart Tab Detection** (NEW!):
+- App now detects and reuses existing RL Tracker tabs in your browser
+- No more navigation or Cloudflare challenges - just grab HTML from open tab
+- Instant refresh when using an already-open page
+- Site auto-refreshes every 5 minutes anyway
+- Perfect for continuous monitoring
+
+✅ **Zero Automation Detection**:
+- Uses your real browser profile (cookies, history, extensions)
+- No automation flags or anti-detection needed
+- Chrome DevTools Protocol connects to existing browser
+- Looks 100% like normal browsing to Cloudflare
+
 ✅ **Parser-Based Workflow**:
 - Switched from direct Playwright scraping to HTML download + offline parsing
-- Eliminates Cloudflare bot detection issues
 - Uses BeautifulSoup for reliable data extraction
 - Only needs overview page HTML (no matches/performance pages required)
 
