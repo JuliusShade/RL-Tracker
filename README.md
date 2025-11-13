@@ -1,57 +1,68 @@
 # 🚀 Rocket League Stats Display App
 
-A Raspberry Pi-friendly Python application that scrapes Rocket League Tracker profile data and displays a live stats dashboard locally.
+A Raspberry Pi-friendly Python application that displays Rocket League Tracker profile data in a polished desktop dashboard.
 
-The app runs periodically pulling updated stats (MMR, ranks, win rates, recent matches, performance metrics) and displaying them with polished visuals. It includes a caching layer to reduce scraping frequency and maintain performance.
+The app uses a two-step workflow: first download the HTML from RL Tracker, then parse it offline to extract stats. This avoids Cloudflare bot detection and provides reliable data extraction.
 
 ## 📊 Architecture Overview
 
 ```text
 ┌────────────────────────┐
-│  RL Tracker Pages      │ (overview / matches / mmr / performance)
+│  RL Tracker Website    │ (overview page)
 └───────────┬────────────┘
             │
-    [Playwright Scraper]
-            │ (every 10 min)
-            ▼
-    rl_stats.json
+    [Chrome CDP Scraper]  (saves HTML)
             │
-    [PySide6 GUI Renderer]
-            │ (reads + displays)
             ▼
-  Beautiful Dashboard w/ Rank Info
+    data/html/overview.html
+            │
+    [BeautifulSoup Parser]  (extracts data)
+            │
+            ▼
+    rl_stats.json (cache)
+            │
+    [PySide6 GUI]
+            │
+            ▼
+  Beautiful Dashboard w/ Live Stats
 ```
 
 ## 🔧 Technical Details
 
 ### Language & Frameworks
-- **Python 3** - core logic and runtime
-- **Playwright** - headless Chromium scraping for dynamic Rocket League Tracker pages
-- **PySide6 (Qt for Python)** - GUI rendering with signals & slots
+- **Python 3.9+** - core logic and runtime (tested on 3.13)
+- **Playwright** - connects to real Chrome browser to download HTML
+- **BeautifulSoup4** - offline HTML parsing (reliable, no Cloudflare issues)
+- **PySide6 (Qt for Python)** - GUI rendering with dark theme
 - **YAML / JSON** - configuration and caching
 
 ### Key Modules
-- **`scraper.py`** - uses Playwright to extract current ranks, MMR, win rates, and match data from user profile pages
-- **`app.py`** - builds a responsive PySide6 GUI that reads from cache and displays stats
-- **`activity_map.py`** - creates GitHub-style activity heatmap showing match frequency over last 30 days
-- **`rank_map.py`** - maps rank text to icon file paths for visual rank display
-- **`assets/`** - stores rank icon images (Bronze → Supersonic Legend)
-- **`config.yaml`** - defines URLs and refresh interval
+- **`scraper_cdp_auto.py`** - connects to Chrome via CDP to save HTML from overview page
+- **`parser.py`** - uses BeautifulSoup to extract ranks, sessions, lifetime stats from saved HTML
+- **`app.py`** - builds responsive PySide6 GUI with stats dashboard
+- **`activity_map.py`** - creates GitHub-style activity heatmap showing match frequency
+- **`rank_map.py`** - maps rank text to icon file paths (e.g., "Champion III" → Champion3_rank_icon.webp)
+- **`assets/ranks/`** - stores rank icon images (Bronze → Supersonic Legend)
+- **`config.yaml`** - profile settings and display configuration
 
 ## 📁 Project Structure
 
 ```bash
 rl-tracker/
+├── scraper_cdp_auto.py        # Chrome CDP HTML downloader
+├── parser.py                  # BeautifulSoup HTML parser
 ├── app.py                     # PySide6 GUI renderer
-├── scraper.py                 # Playwright scraper logic
 ├── activity_map.py            # Play activity heatmap widget
 ├── rank_map.py                # Rank icon mapping utilities
+├── data/
+│   └── html/
+│       └── overview.html      # Saved HTML (auto-generated)
 ├── assets/
-│   └── ranks/*.png            # Rank badges (optional)
-├── config.yaml                # Refresh intervals and URLs
-├── rl_stats.json              # Cached stats (auto-generated)
+│   └── ranks/*.webp           # Rank badges (Champion1, Diamond2, etc.)
+├── config.yaml                # Profile and display settings
+├── rl_stats.json              # Parsed stats cache (auto-generated)
 ├── requirements.txt           # Dependencies
-├── README.md                  # Documentation
+├── README.md                  # This file
 └── CLAUDE.md                  # Development context
 ```
 
@@ -59,6 +70,7 @@ rl-tracker/
 
 ### Prerequisites
 - Python 3.9 or higher (tested on Python 3.13)
+- Microsoft Edge or Google Chrome browser
 - pip (Python package manager)
 
 ### Setup Steps
@@ -89,53 +101,81 @@ profile:
 
 ## 🎮 Usage
 
-### First Run - Scrape Stats
+### Recommended Workflow
 
-Before launching the GUI, you need to scrape your stats:
+The app uses a two-step process to avoid Cloudflare bot detection:
 
+#### Step 1: Download HTML from RL Tracker
+
+First, start Edge with remote debugging enabled:
+
+**Windows**:
+```powershell
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\temp\edge_debug"
+```
+
+**Mac/Linux**:
 ```bash
-python scraper.py
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome_debug
+```
+
+Then run the scraper to download the HTML:
+```bash
+python scraper_cdp_auto.py
 ```
 
 This will:
-- Connect to Rocket League Tracker
-- Scrape your profile data (may take 30-60 seconds)
-- Save stats to `rl_stats.json` in the project directory
+- Connect to your open browser
+- Navigate to your RL Tracker profile
+- Wait for Cloudflare verification (if needed - complete it manually in the browser)
+- Save the HTML to `data/html/overview.html`
+- Automatically run the parser
 
-### Launch the Dashboard
+#### Step 2: Parse and Display
+
+The parser runs automatically after scraping, but you can also run it manually:
 
 ```bash
-python app.py
+python parser.py  # Extract data from saved HTML
+python app.py     # Launch GUI
 ```
 
-This will:
+The GUI will:
 - Load stats from cache
-- Display your current ranks and MMR with rank icons
-- Show play activity heatmap (last 30 days)
-- Show recent match history (last 3 matches)
-- Display performance metrics
-- Auto-refresh every 10 minutes (configurable)
+- Display current ranks with rank icons
+- Show lifetime stats (wins, goals, assists, saves, MVPs, etc.)
+- Display play activity heatmap (last 30 days)
+- Show recent gaming sessions with match counts
+- Display stats breakdown pie chart
+- Auto-refresh every 10 minutes
 
 ### Manual Refresh
 
-You can manually refresh stats by:
-1. Running `python scraper.py` again
-2. Clicking the "Refresh" button in the app
+To get fresh data:
+1. Re-run `python scraper_cdp_auto.py` (downloads new HTML)
+2. Click "Refresh" button in the app (reloads from cache)
 
 ## ✨ Features
 
-- 🔄 **Automated scraping** of profile pages:
-  - Overview (ranks and MMR)
-  - Recent matches with dates
-  - Performance metrics
-- 📈 **Play activity heatmap** - GitHub-style visualization of matches over last 30 days
-- 🏆 **Rank icon display** - visual rank badges (when icons added to assets/ranks/)
-- ⏰ **Configurable refresh interval** (default: 10 minutes)
-- 💾 **Local caching** (saves to project directory)
-- 🎨 **Polished PySide6 dashboard** optimized for 7" Raspberry Pi touchscreen (800x480)
-- 🌙 **Dark/Light theme support**
-- 🔄 **Auto-refresh** capability
-- ⚙️ **Config-driven design** using `config.yaml`
+### Data Extraction
+- 🏆 **All ranks and MMR** from all playlists (1v1, 2v2, 3v3, Extra Modes)
+- 📊 **Lifetime statistics** - wins, goals, assists, saves, shots, MVPs, goal shot ratio
+- 🕒 **Gaming sessions** - recent play sessions with match counts and stats
+- 📈 **Activity heatmap** - GitHub-style visualization of matches over last 30 days
+- 📉 **Match stats breakdown** - pie chart of goals/assists/saves distribution
+
+### Display
+- 🎨 **Polished dark theme** optimized for 7" Raspberry Pi touchscreen (800x480)
+- 🖼️ **Rank icon display** - visual rank badges (Champion3_rank_icon.webp, etc.)
+- 📊 **Compact layout** - all content fits on one screen, no scrolling
+- 🔄 **Auto-refresh** - updates display every 10 minutes
+- ⚙️ **Configurable** - theme, size, refresh interval via config.yaml
+
+### Technical
+- 🛡️ **Cloudflare bypass** - uses real browser, avoids bot detection
+- 💾 **Offline parsing** - BeautifulSoup extracts data from saved HTML
+- 📦 **Local caching** - stores data in project directory
+- 🔧 **Config-driven** - easy customization via YAML
 
 ## ⚙️ Configuration
 
@@ -144,7 +184,7 @@ Edit `config.yaml` to customize:
 ```yaml
 # Change your profile
 profile:
-  platform: "epic"
+  platform: "epic"      # Options: epic, steam, psn, xbl
   username: "YourUsername"
 
 # Adjust refresh rate
@@ -158,8 +198,61 @@ cache:
 # Change display settings
 display:
   window_width: 800
-  window_height: 480  # Optimized for 7" Raspberry Pi touchscreen
-  theme: "dark"  # or "light"
+  window_height: 480    # Optimized for 7" Raspberry Pi touchscreen
+  theme: "dark"         # Options: dark, light
+```
+
+## 📊 Data Structure
+
+The parser extracts and caches the following data structure:
+
+```json
+{
+  "timestamp": "2025-11-12T21:05:07",
+  "overview": {
+    "Ranked Duel 1v1": {
+      "rank": "Diamond I Div II",
+      "mmr": 823
+    },
+    "Ranked Doubles 2v2": {
+      "rank": "Champion III Div I",
+      "mmr": 1308
+    },
+    "__lifetime__": {
+      "Wins": "2,260",
+      "Goals": "5,785",
+      "Assists": "2,292",
+      "Saves": "3,656",
+      "Shots": "11,940",
+      "MVPs": "897",
+      "Goal Shot Ratio": "48.5%"
+    }
+  },
+  "sessions": [
+    {
+      "time_ago": "22 hours ago",
+      "date": "2025-11-12",
+      "wins": 12,
+      "matches": [
+        {
+          "count": 49,
+          "playlist": "Ranked Standard 3v3",
+          "mmr": 1096
+        }
+      ],
+      "goals": 22,
+      "assists": 13,
+      "saves": 249,
+      "mvp_count": 6
+    }
+  ],
+  "activity_heatmap": [
+    {
+      "date": "2025-11-12",
+      "count": 122
+    }
+  ]
+}
 ```
 
 ## 🥧 Deployment Notes (Raspberry Pi)
@@ -167,7 +260,7 @@ display:
 ### Install System Dependencies
 ```bash
 sudo apt update
-sudo apt install python3-pip python3-pyqt6 -y
+sudo apt install python3-pip chromium-browser -y
 ```
 
 ### Install Python Dependencies
@@ -177,84 +270,106 @@ playwright install chromium
 ```
 
 ### Configure for Pi Display
-The app is optimized for a 7" touchscreen (800x480) by default. The layout is compact with no scrollbars, fitting all content on one screen.
+The app is optimized for a 7" touchscreen (800x480) by default. The layout is compact with improved text rendering - no cropping or overflow issues.
 
 ### Run the App
 ```bash
-python scraper.py  # First time setup / refresh data
-python app.py      # Launch GUI
+# Start browser with debugging
+chromium-browser --remote-debugging-port=9222 --user-data-dir=/tmp/chrome_debug &
+
+# Download HTML and parse
+python scraper_cdp_auto.py
+
+# Launch GUI
+python app.py
 ```
 
 ### Autostart at Boot
+
+Create a startup script:
+```bash
+nano ~/start_rl_tracker.sh
+```
+
+Add:
+```bash
+#!/bin/bash
+cd /home/pi/RL-Tracker
+chromium-browser --remote-debugging-port=9222 --user-data-dir=/tmp/chrome_debug &
+sleep 5
+python3 app.py
+```
+
+Make it executable and add to autostart:
+```bash
+chmod +x ~/start_rl_tracker.sh
+# Add to ~/.config/autostart or crontab
+```
+
+For periodic scraping:
 ```bash
 crontab -e
 ```
 
-Add this line:
+Add:
 ```bash
-@reboot sleep 30 && cd /home/pi/RL-Tracker && /usr/bin/python3 app.py &
-```
-
-For periodic scraping, add:
-```bash
-*/10 * * * * cd /home/pi/RL-Tracker && /usr/bin/python3 scraper.py
-```
-
-## 📝 Example Cache Output
-
-```json
-{
-  "timestamp": "2025-11-11T14:30:00",
-  "overview": {
-    "Ranked Duel 1v1": { "rank": "Gold III", "mmr": 975 },
-    "Ranked Doubles 2v2": { "rank": "Champion III", "mmr": 1310 },
-    "Ranked Standard 3v3": { "rank": "Diamond II", "mmr": 1125 }
-  },
-  "recent_matches": [
-    { "result": "Win", "playlist": "Ranked Doubles 2v2", "mmr_change": "+9", "date": "2025-11-11" }
-  ],
-  "performance": {
-    "Goals": "3.2",
-    "Assists": "1.8",
-    "Saves": "2.4",
-    "Win Rate": "58%"
-  }
-}
+*/30 * * * * cd /home/pi/RL-Tracker && /usr/bin/python3 scraper_cdp_auto.py
 ```
 
 ## 🔧 Troubleshooting
 
 ### Scraper Issues
-- **Browser fails to launch**: Run `playwright install chromium` again
-- **Stats not loading**: Check your internet connection and verify your username/platform in config.yaml
-- **Timeout errors**: The site may be slow or using Cloudflare protection; the scraper includes anti-detection measures but may occasionally fail
-- **No match/performance data**: The scraper may need selector updates if the RL Tracker site structure changed
+- **"Could not connect to Edge"**: Make sure you started the browser with `--remote-debugging-port=9222`
+- **Cloudflare challenge appears**: Complete the verification manually in the browser - the scraper will detect when it's cleared and continue
+- **No HTML saved**: Check that the browser is accessible at `http://localhost:9222`
+- **Stats not loading**: Verify your username/platform in config.yaml
+
+### Parser Issues
+- **"Could not load overview.html"**: Run `scraper_cdp_auto.py` first to download the HTML
+- **No lifetime stats**: The overview page may not be showing lifetime stats - check the HTML file
+- **No sessions found**: The parser may need selector updates if RL Tracker changed their layout
 
 ### GUI Issues
 - **App won't start**: Ensure PySide6 is installed: `pip install PySide6>=6.8.0`
-- **No stats shown**: Run `python scraper.py` first to populate the cache
-- **Theme not applying**: Check `theme` setting in config.yaml is "dark" or "light"
-- **Layout too large/small**: Adjust `window_width` and `window_height` in config.yaml
+- **No stats shown**: Run `scraper_cdp_auto.py` then `parser.py` to populate the cache
+- **Text is cropped**: Update to latest version - text cropping issues have been fixed
+- **Rank icons not showing**: Add rank icon files to `assets/ranks/` (e.g., `Champion3_rank_icon.webp`)
+- **Wrong rank icon**: Rank mapping has been fixed - update to latest version
 
-## 🎯 Recent Updates (Issue #3)
+## 🎯 Recent Updates
 
-✅ **Completed**:
-- Cache now saves to project root (`rl_stats.json`) instead of user cache directory
-- Improved scraper with better selectors and extended timeouts
-- Added date parsing for matches to enable activity tracking
-- Created play activity heatmap widget (GitHub-style visualization)
-- Optimized layout for 7" Raspberry Pi display (800x480)
-- Rank icons now integrated into compact display
-- All content fits on one screen without scrolling
+### Latest (November 2025)
+✅ **Parser-Based Workflow**:
+- Switched from direct Playwright scraping to HTML download + offline parsing
+- Eliminates Cloudflare bot detection issues
+- Uses BeautifulSoup for reliable data extraction
+- Only needs overview page HTML (no matches/performance pages required)
+
+✅ **Lifetime Stats**:
+- Added comprehensive lifetime statistics display
+- Extracts wins, goals, assists, saves, shots, MVPs, goal shot ratio
+- Displays in dedicated stats section
+
+✅ **Fixed Rank Icon Mapping**:
+- Fixed bug where "Champion III Div I" showed Champion I icon
+- Now correctly extracts rank tier from rank name (not division)
+- Uses regex to match rank patterns precisely
+
+✅ **UI Improvements**:
+- Fixed text cropping in all sections (ranks, sessions, stats)
+- Resized pie chart to fit properly
+- Added word wrap to prevent text overflow
+- Improved label sizing and spacing
+- Compact layout optimized for 800x480 displays
 
 ## 📋 Next Steps
 
-- [ ] Add actual rank badge PNG images to `assets/ranks/` directory
-- [ ] Add MMR trend charts/graphs
+- [ ] Add more rank badge images to `assets/ranks/` directory
+- [ ] Add MMR trend charts over time
 - [ ] Add systemd service for automatic startup
-- [ ] Add persistent settings UI
+- [ ] Add persistent settings UI (currently config file only)
 - [ ] Add notifications for rank changes
-- [ ] Multi-profile support
+- [ ] Multi-profile support (track multiple players)
 
 ## 📄 License
 
@@ -271,4 +386,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-**Note**: Web scraping depends on the RL Tracker site structure. If the site changes significantly, selectors in `scraper.py` may need updates.
+**Note**: This app relies on scraping RL Tracker's website structure. If the site changes significantly, the parser selectors in `parser.py` may need updates. The HTML-based approach makes debugging and updating selectors much easier than live scraping.

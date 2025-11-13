@@ -23,9 +23,14 @@ wheels/
 .installed.cfg
 *.egg
 
-# Cache
+# Cache and data
 .cache/
-*.json
+rl_stats.json
+data/html/*.html
+
+# Browser profiles (Issue #4)
+browser_profile/
+.browser_data/
 
 # IDE
 .vscode/
@@ -40,6 +45,11 @@ Thumbs.db
 
 # Playwright
 playwright/.local-browsers/
+
+# Screenshots and debug files
+*_screenshot.png
+*_debug.png
+scraper_debug.png
 
 # Local config overrides
 config.local.yaml

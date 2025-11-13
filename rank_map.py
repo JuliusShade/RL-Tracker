@@ -71,27 +71,77 @@ def rank_icon_path(rank_text: str) -> Path:
     Get the file path for a rank icon based on rank text.
 
     Args:
-        rank_text: Raw rank text (e.g., "Champion I Division II")
+        rank_text: Raw rank text (e.g., "Champion I Division II", "Champion III Div I")
 
     Returns:
-        Path to the rank icon PNG file. Falls back to unranked.png if not found.
+        Path to the rank icon WEBP file. Returns None if not found.
+
+    File naming convention:
+        - Champion1_rank_icon.webp (Champion I)
+        - Diamond3_rank_icon.webp (Diamond III)
+        - Grand_champion2_rank_icon.webp (Grand Champion II)
+        - Supersonic_Legend_rank_icon.webp
     """
-    # Normalize the rank name
-    key = normalize_rank_name(rank_text)
+    if not rank_text or rank_text.lower() == "unranked":
+        return None  # No icon for unranked
 
-    # Try exact match first
-    png = RANK_ICON_DIR / f"{key}.png"
-    if png.exists():
-        return png
+    # Clean the rank text
+    rank_lower = rank_text.lower()
 
-    # Try base rank without division (e.g., "champion" instead of "champion_i")
-    base = key.split("_")[0]
-    fb = RANK_ICON_DIR / f"{base}.png"
-    if fb.exists():
-        return fb
+    # Map Roman numerals to numbers (order matters - check longer patterns first!)
+    roman_patterns = [
+        (' iii ', '3'),  # Must check III before I
+        (' ii ', '2'),   # Must check II before I
+        (' iv ', '4'),
+        (' v ', '5'),
+        (' i ', '1'),    # Check I last
+    ]
 
-    # Fall back to unranked
-    return RANK_ICON_DIR / "unranked.png"
+    # Extract rank tier and division
+    # Examples: "Champion III Div I", "Diamond I Division II"
+
+    # Handle special cases
+    if "supersonic legend" in rank_lower:
+        icon_path = RANK_ICON_DIR / "Supersonic_Legend_rank_icon.webp"
+        if icon_path.exists():
+            return icon_path
+
+    # Handle Grand Champion
+    if "grand champion" in rank_lower:
+        # Extract the tier (I, II, III) - search for pattern right after "grand champion"
+        # Pattern: "grand champion III" not "grand champion ... div I"
+        gc_pattern = re.search(r'grand champion\s+(iii|ii|i(?!\w))', rank_lower)
+        if gc_pattern:
+            tier_roman = gc_pattern.group(1)
+            for roman, num in roman_patterns:
+                if tier_roman.strip() == roman.strip():
+                    icon_path = RANK_ICON_DIR / f"Grand_champion{num}_rank_icon.webp"
+                    if icon_path.exists():
+                        return icon_path
+                    break
+
+    # Handle regular ranks (Bronze, Silver, Gold, Platinum, Diamond, Champion)
+    ranks = ["champion", "diamond", "platinum", "gold", "silver", "bronze"]
+
+    for rank in ranks:
+        if rank in rank_lower:
+            # Find the tier number RIGHT AFTER the rank name (not from division)
+            # Pattern: "champion III" not "champion ... div I"
+            rank_pattern = re.search(rf'{rank}\s+(iii|ii|i(?!\w))', rank_lower)
+            if rank_pattern:
+                tier_roman = rank_pattern.group(1)
+                for roman, num in roman_patterns:
+                    if tier_roman.strip() == roman.strip():
+                        # Capitalize first letter of rank
+                        rank_cap = rank.capitalize()
+                        icon_path = RANK_ICON_DIR / f"{rank_cap}{num}_rank_icon.webp"
+                        if icon_path.exists():
+                            return icon_path
+                        break
+            break
+
+    # If no match found, return None
+    return None
 
 
 # Example usage
